@@ -3,36 +3,86 @@ package cfr2
 import (
 	"context"
 	"fmt"
-	"github.com/MSkrzypietz/backuper/internal/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"gopkg.in/yaml.v3"
 	"os"
 )
 
 const ProviderName = "cloudflare-r2"
 
+type Config struct {
+	AccessKey  string `yaml:"accessKey"`
+	SecretKey  string `yaml:"secretKey"`
+	AccountID  string `yaml:"accountID"`
+	BucketName string `yaml:"bucketName"`
+}
+
 type CloudflareR2Provider struct {
-	cfg    storage.ProviderConfig
+	cfg    Config
 	client *s3.Client
 }
 
-func NewCloudflareR2Provider(cfg storage.ProviderConfig) (*CloudflareR2Provider, error) {
+func NewCloudflareR2Provider(configNode *yaml.Node) (*CloudflareR2Provider, error) {
 	var provider CloudflareR2Provider
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
+
+	cfg, err := decodeProviderConfigNode(configNode)
+	if err != nil {
+		return &provider, err
+	}
+
+	client, err := newClient(cfg)
+	if err != nil {
+		return &provider, err
+	}
+
+	provider.cfg = cfg
+	provider.client = client
+	return &provider, nil
+}
+
+func decodeProviderConfigNode(node *yaml.Node) (Config, error) {
+	var cfg Config
+
+	err := node.Decode(&cfg)
+	if err != nil {
+		return cfg, fmt.Errorf("invalid provider config: %w", err)
+	}
+
+	if cfg.AccessKey == "" {
+		return cfg, fmt.Errorf("invalid provider config: missing access key")
+	}
+	if cfg.SecretKey == "" {
+		return cfg, fmt.Errorf("invalid provider config: missing secret key")
+	}
+	if cfg.AccountID == "" {
+		return cfg, fmt.Errorf("invalid provider config: missing account id")
+	}
+	if cfg.AccessKey == "" {
+		return cfg, fmt.Errorf("invalid provider config: missing bucket name")
+	}
+
+	return cfg, nil
+}
+
+func newClient(cfg Config) (*s3.Client, error) {
+	var client *s3.Client
+
+	awsCfg, err := config.LoadDefaultConfig(
+		context.Background(),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")),
 		config.WithRegion("auto"),
 	)
 	if err != nil {
-		return &provider, fmt.Errorf("unable to authenticate: %w", err)
+		return client, fmt.Errorf("unable to authenticate: %w", err)
 	}
 
-	provider.cfg = cfg
-	provider.client = s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID))
+	client = s3.NewFromConfig(awsCfg, func(opts *s3.Options) {
+		opts.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID))
 	})
-	return &provider, nil
+	return client, nil
 }
 
 func (p *CloudflareR2Provider) GetName() string {

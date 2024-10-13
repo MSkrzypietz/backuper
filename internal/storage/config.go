@@ -8,21 +8,21 @@ import (
 	"path"
 )
 
+type RawNode struct{ *yaml.Node }
+
+func (n *RawNode) UnmarshalYAML(node *yaml.Node) error {
+	n.Node = node
+	return nil
+}
+
 type BackupConfig struct {
 	Path     string `yaml:"path"`
 	Provider string `yaml:"provider"`
 }
 
-type ProviderConfig struct {
-	AccessKey  string `yaml:"accessKey"`
-	SecretKey  string `yaml:"secretKey"`
-	AccountID  string `yaml:"accountID"`
-	BucketName string `yaml:"bucketName"`
-}
-
 type Config struct {
-	BackupConfigs   map[string]BackupConfig   `yaml:"backups"`
-	ProviderConfigs map[string]ProviderConfig `yaml:"providers"`
+	BackupConfigs   map[string]BackupConfig `yaml:"backups"`
+	ProviderConfigs map[string]RawNode      `yaml:"providers"`
 }
 
 func NewConfig(r io.Reader) (Config, error) {

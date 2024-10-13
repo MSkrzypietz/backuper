@@ -8,25 +8,25 @@ import (
 )
 
 func main() {
-	config, err := storage.NewConfigFromEnv()
+	cfg, err := storage.NewConfigFromEnv()
 	if err != nil {
 		logger.Fatal("failed to create config", "err", err)
 	}
 
-	err = config.Validate()
+	err = cfg.Validate()
 	if err != nil {
 		logger.Fatal("invalid config", "err", err)
 	}
 
-	s := storage.NewStorage(config)
-	provider, err := cfr2.NewCloudflareR2Provider(config.ProviderConfigs[cfr2.ProviderName])
+	s := storage.NewStorage(cfg)
+	provider, err := cfr2.NewCloudflareR2Provider(cfg.ProviderConfigs[cfr2.ProviderName].Node)
 	if err != nil {
 		logger.Error("failed to create r2 provider", "err", err)
 	} else {
 		s.RegisterProvider(provider)
 	}
 
-	for backupName := range config.BackupConfigs {
+	for backupName := range cfg.BackupConfigs {
 		logger.Info(fmt.Sprintf("backing up %s...", backupName))
 		err = s.Backup(backupName)
 		if err != nil {
